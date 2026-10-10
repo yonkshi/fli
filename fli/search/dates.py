@@ -11,7 +11,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fli.core import extract_currency_from_price_token
 from fli.models import DateSearchFilters, FlightResult, PassengerInfo
@@ -141,6 +141,18 @@ class _SweepHealth:
             return not self._any_success and self._blocked >= self._threshold
 
 
+class DateSearchCoverage(BaseModel):
+    """Request-owned metadata, reset on every search; dates are in input order."""
+
+    candidate_dates: list[str] = Field(default_factory=list)
+    attempted_dates: list[str] = Field(default_factory=list)
+    priced_dates: list[str] = Field(default_factory=list)
+    empty_dates: list[str] = Field(default_factory=list)
+    failed_dates: list[str] = Field(default_factory=list)
+    unattempted_dates: list[str] = Field(default_factory=list)
+    complete: bool = False
+
+
 class DatePrice(BaseModel):
     """Flight price for a specific date."""
 
@@ -266,6 +278,8 @@ class SearchDates:
         currency: str | None = None,
         language: str | None = None,
         country: str | None = None,
+        *,
+        coverage: DateSearchCoverage | None = None,
     ) -> list[DatePrice] | None:
         """Search for flight prices across a date range and search parameters.
 
@@ -274,6 +288,8 @@ class SearchDates:
             currency: Optional ISO 4217 currency code (e.g. ``"EUR"``) to bill prices in.
             language: Optional BCP-47 language code passed via the ``hl`` URL param.
             country: Optional ISO 3166-1 alpha-2 country code passed via the ``gl`` URL param.
+            coverage: Optional caller-owned metadata, reset before each request and
+                populated before result collection, including searches that fail.
 
         Returns:
             List of DatePrice objects containing date and price pairs, or None if no results
@@ -296,6 +312,9 @@ class SearchDates:
         # Reset before any code below can raise, so a search that raises
         # never leaves a stale True from an earlier call on this instance.
         self._sparse_passenger_mix = False
+        if coverage is not None:
+            for field, value in DateSearchCoverage().model_dump().items():
+                setattr(coverage, field, value)
 
         dropped = unsupported_filters(filters)
         if dropped:
@@ -348,6 +367,20 @@ class SearchDates:
             ),
             tasks,
         )
+        if coverage is not None:
+            coverage.candidate_dates = [day.strftime("%Y-%m-%d") for _, day in tasks]
+            for day, outcome in zip(coverage.candidate_dates, outcomes, strict=True):
+                if not outcome.attempted:
+                    coverage.unattempted_dates.append(day)
+                    continue
+                coverage.attempted_dates.append(day)
+                if outcome.failure:
+                    coverage.failed_dates.append(day)
+                elif outcome.price is not None:
+                    coverage.priced_dates.append(day)
+                else:
+                    coverage.empty_dates.append(day)
+            coverage.complete = not coverage.failed_dates and not coverage.unattempted_dates
         result = self._collect(outcomes, len(tasks), skipped=health.skipped)
         self._sparse_passenger_mix = self._warn_if_sparse_passenger_mix(
             outcomes, result, filters.passenger_info

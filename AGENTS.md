@@ -50,3 +50,17 @@ workflows for the full process.
 
 - The MCP HTTP endpoint requires `Accept: application/json, text/event-stream` header.
 - The `fli/server/` module has been removed from the codebase.
+
+## Maintained personal-mcp fork
+
+- Origin: `https://github.com/yonkshi/fli.git`; upstream: `https://github.com/punitarani/fli.git`.
+- Maintain the patch series on `codex/personal-mcp`. Fetch upstream and merge its
+  release commit into this branch; never rebase or rewrite published patch commits.
+  Review `PATCHES.md`, resolve conflicts and run offline tests before pushing.
+- Install with `uv sync --all-extras`. Targeted offline verification:
+  `uv run pytest -q tests/search tests/mcp`; full offline verification:
+  `uv run pytest -q --all`. Do not pass `--live` for routine verification.
+- The distribution remains `flights`. personal-mcp pins this fork by immutable
+  commit in its dependency lock; updates require changing and validating that pin
+  in personal-mcp after reviewing the fork patch. Do not commit credentials or
+  environment files to either repository.

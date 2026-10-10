@@ -46,7 +46,7 @@ from fli.models import (
     display_name,
 )
 from fli.search import SearchDates, SearchFlights
-from fli.search.dates import MAX_DATES_PER_SEARCH
+from fli.search.dates import MAX_DATES_PER_SEARCH, DateSearchCoverage
 from fli.search.flights import SPARSE_PASSENGER_MIX_WARNING
 
 
@@ -918,6 +918,7 @@ def _execute_booking_options(
 
 def _execute_date_search(params: DateSearchParams) -> dict[str, Any]:
     """Execute a date search and return formatted results."""
+    coverage = DateSearchCoverage()
     try:
         # Parse inputs using shared utilities (supports comma-separated multi-airport)
         origins = _resolve_airports(params.origin)
@@ -982,11 +983,22 @@ def _execute_date_search(params: DateSearchParams) -> dict[str, Any]:
             currency=currency,
             language=params.language,
             country=params.country,
+            coverage=coverage,
         )
 
+        metadata = {
+            "coverage": coverage.model_dump(),
+            "warnings": []
+            if coverage.complete
+            else [
+                f"Incomplete date sweep: {len(coverage.failed_dates)} dates failed and "
+                f"{len(coverage.unattempted_dates)} dates were not attempted."
+            ],
+        }
         if not dates:
             return {
                 "success": True,
+                **metadata,
                 "dates": [],
                 "count": 0,
                 "trip_type": trip_type.name,
@@ -1005,6 +1017,7 @@ def _execute_date_search(params: DateSearchParams) -> dict[str, Any]:
 
         return {
             "success": True,
+            **metadata,
             "dates": date_results,
             "count": len(date_results),
             "trip_type": trip_type.name,
@@ -1018,6 +1031,7 @@ def _execute_date_search(params: DateSearchParams) -> dict[str, Any]:
             "error": str(e),
             "dates": [],
             **classify_error(e).as_fields(),
+            **({"coverage": coverage.model_dump()} if coverage.candidate_dates else {}),
         }
     except ValidationError as e:
         return {
@@ -1025,6 +1039,7 @@ def _execute_date_search(params: DateSearchParams) -> dict[str, Any]:
             "error": format_validation_error(e),
             "dates": [],
             **classify_error(e).as_fields(),
+            **({"coverage": coverage.model_dump()} if coverage.candidate_dates else {}),
         }
     except Exception as e:
         return {
@@ -1032,6 +1047,7 @@ def _execute_date_search(params: DateSearchParams) -> dict[str, Any]:
             "error": _search_error_message(e),
             "dates": [],
             **classify_error(e).as_fields(),
+            **({"coverage": coverage.model_dump()} if coverage.candidate_dates else {}),
         }
 
 

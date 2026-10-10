@@ -1,4 +1,4 @@
-from .dates import DatePrice, SearchDates
+from .dates import DatePrice, DateSearchCoverage, SearchDates
 from .exceptions import (
     SearchCertificateError,
     SearchClientError,
@@ -15,6 +15,7 @@ __all__ = [
     "SearchFlights",
     "SearchDates",
     "DatePrice",
+    "DateSearchCoverage",
     "SearchClientError",
     "SearchTimeoutError",
     "SearchConnectionError",
