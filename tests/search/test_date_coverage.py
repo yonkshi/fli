@@ -11,6 +11,12 @@ from fli.search.exceptions import SearchTimeoutError
 from tests.search._pages import as_search_page
 
 
+@pytest.fixture(autouse=True)
+def coverage_clock(pin_today):
+    """Keep captured date sweeps independent of calendar passage."""
+    pin_today("2026-10-10")
+
+
 @pytest.fixture
 def page_transport(monkeypatch):
     page = as_search_page(
